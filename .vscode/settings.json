@@ -1,6 +1,7 @@
 {
     "files.associations": {
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "future": "c"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/gcc"
 }

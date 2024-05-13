@@ -1,66 +1,70 @@
-#include <cmath>
-#include <iostream>
+#include <time.h>
+#include <math.h>
+#include <stdio.h>
 
-using namespace std;
-
-double calcSin(double x)
+double function(double x)
 {
     return sin(5 * x);
 }
 
 int main()
 {
-    double lower = 0, upper = 3;
-    int n = 25;
-    double h = (upper - lower) / (n - 1);
 
-    double a[n], b[n], c[n], y[n], l[n], u[n], x[n];
-#pragma acc enter data create(a[ : n], b[ : n], c[ : n], y[ : n], l[ : n], u[ : n], x[ : n])
+    double lower_limit = 0, upper_limit = 3;
+    int num_intervals = 1000;
+    double step_size = (upper_limit - lower_limit) / (num_intervals - 1);
 
-// Initialize arrays a, b, c, and calculate y in parallel
-#pragma acc parallel loop present(a, b, c, y)
-    for (int i = 0; i < n; i++)
+    double a[num_intervals], b[num_intervals], c[num_intervals], y[num_intervals], l[num_intervals], u[num_intervals], x[num_intervals];
+
+    clock_t timer;
+    timer = clock();
+
+// Initialization
+#pragma acc parallel loop num_gangs(1000) create(a[0 : num_intervals], b[0 : num_intervals], c[0 : num_intervals], y[0 : num_intervals])
+    for (int i = 0; i < num_intervals; i++)
     {
         a[i] = 1;
         b[i] = 4;
         c[i] = 1;
-        y[i] = 3 / h * (calcSin(h * (i + 1)) - calcSin(h * (i - 1)));
+        y[i] = 3 / step_size * (function(step_size * (i + 1)) - function(step_size * (i - 1)));
     }
-
     a[0] = 0;
-    a[n - 1] = 2;
+    a[num_intervals - 1] = 2;
     b[0] = 1;
-    b[n - 1] = 1;
+    b[num_intervals - 1] = 1;
     c[0] = 2;
-    c[n - 1] = 0;
-    y[0] = 1 / h * (-5.0 / 2 * calcSin(lower) + 2 * calcSin(lower + h) + 1.0 / 2 * calcSin(lower + 2 * h));
-    y[n - 1] = 1 / h * (5.0 / 2 * calcSin(upper) - 2 * calcSin(upper - h) - 1.0 / 2 * calcSin(upper - 2 * h));
+    c[num_intervals - 1] = 0;
+    y[0] = 1 / step_size * (-5.0 / 2 * function(lower_limit) + 2 * function(lower_limit + step_size) + 1.0 / 2 * function(lower_limit + 2 * step_size));
+    y[num_intervals - 1] = 1 / step_size * (5.0 / 2 * function(upper_limit) - 2 * function(upper_limit - step_size) - 1.0 / 2 * function(upper_limit - 2 * step_size));
 
-    // Forward elimination and backward substitution
+    // Forward Elimination
     u[0] = b[0];
-#pragma acc parallel loop present(l, u, y)
-    for (int i = 1; i < n; i++)
+#pragma acc parallel loop num_gangs(1000) present(a[0 : num_intervals], b[0 : num_intervals], c[0 : num_intervals], y[0 : num_intervals]) copyout(l[0 : num_intervals], u[0 : num_intervals], y[0 : num_intervals])
+    for (int i = 1; i < num_intervals; i++)
     {
         l[i] = a[i] / u[i - 1];
         u[i] = b[i] - l[i] * c[i - 1];
         y[i] = y[i] - l[i] * y[i - 1];
     }
 
-    x[n - 1] = y[n - 1] / u[n - 1];
-#pragma acc parallel loop present(x, y, c, u)
-    for (int i = n - 2; i >= 0; i--)
+    // Backward Substitution
+    x[num_intervals - 1] = y[num_intervals - 1] / u[num_intervals - 1];
+#pragma acc kernels
+    for (int i = num_intervals - 2; i >= 0; i--)
     {
         x[i] = (y[i] - c[i] * x[i + 1]) / u[i];
     }
 
-    cout << "[";
-    for (int i = 0; i < n - 1; i++)
-    {
-        cout << x[i] << ",";
-    }
-    cout << x[n - 1] << "]" << endl;
+    timer = clock() - timer;
+    printf("Time taken: %fs\n", ((float)timer) / CLOCKS_PER_SEC);
 
-#pragma acc exit data delete (a[ : n], b[ : n], c[ : n], y[ : n], l[ : n], u[ : n], x[ : n])
+    // Print the solution
+    printf("[");
+    for (int i = 0; i < num_intervals; i++)
+    {
+        printf("%f,", x[i]);
+    }
+    printf("]\n");
 
     return 0;
 }
